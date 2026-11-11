@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>J.A.R.V.I.S</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <header>
+    <h1>J.A.R.V.I.S</h1>
+    <p>PERSONAL AI ASSISTANT</p>
+  </header>
+
+  <div class="core">
+    <div class="ring r1"></div>
+    <div class="ring r2"></div>
+    <div class="center"></div>
+  </div>
+  <p class="core-text" id="core-text">SYSTEM READY</p>
+
+  <section class="status">
+    <h2>SYSTEM DIAGNOSTICS</h2>
+    <div class="row"><span>AI ENGINE</span><b id="st-ai" class="on">● OPERATIONAL</b></div>
+    <div class="row"><span>CONNECTION</span><b id="st-net" class="on">● ONLINE</b></div>
+    <div class="row"><span>VOICE INTERFACE</span><b id="st-voice" class="on">● READY</b></div>
+    <div class="row"><span>LONG-TERM MEMORY</span><b id="st-mem" class="on">● ACTIVE</b></div>
+  </section>
+
+  <div class="chat" id="chat" aria-live="polite"></div>
+
+  <div class="input-area">
+    <input id="msg" type="text" placeholder="Enter a command for J.A.R.V.I.S..." autocomplete="off">
+    <button id="send" type="button">EXECUTE</button>
+    <button id="mic-btn" type="button" aria-label="Activate voice input">🎙️</button>
+    <button id="cam-btn" type="button" aria-label="Analyze image">📷</button>
+    <button id="clear-btn" type="button">CLEAR MEMORY</button>
+    <input id="img-input" type="file" accept="image/*" hidden>
+  </div>
+
+  <script src="script.js"></script>
+</body>
+</html>
