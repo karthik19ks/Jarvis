@@ -5,7 +5,7 @@
 
 class WakeWord {
   constructor({
-    wakeWords = ["jarvis", "hey jarvis", "jarvish", "javis", "service"], // common mis-hearings
+    wakeWords = ["hey jarvis", "jarvis", "hey deva", "deva"], // any of these wakes it
     lang = "en-IN",            // use "te-IN" for Telugu
     commandTimeout = 8000,     // ms to wait for command after wake word
     onWake = () => {},
@@ -36,7 +36,8 @@ class WakeWord {
       const text = result[0].transcript.toLowerCase().trim();
 
       if (!this.awake) {
-        const hit = this.wakeWords.find((w) => text.includes(w));
+        // whole-word match, so "deva" won't trigger on "devastating"
+        const hit = this.wakeWords.find((w) => new RegExp("\\b" + w + "\\b").test(text));
         if (hit) {
           this.awake = true;
           this.onStatus("awake");
@@ -48,7 +49,7 @@ class WakeWord {
           else this._armTimeout();
         }
       } else if (result.isFinal) {
-        const hit = this.wakeWords.find((w) => text.startsWith(w));
+        const hit = this.wakeWords.find((w) => new RegExp("^" + w + "\\b").test(text));
         const cmd = hit ? text.slice(hit.length).trim() : text;
         if (cmd) this._finish(cmd);
       }
