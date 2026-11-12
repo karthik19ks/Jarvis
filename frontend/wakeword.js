@@ -1,211 +1,108 @@
+// Voice wake-word module (browser, Web Speech API). Works in Chrome / Android Chrome.
+// Usage:
+//   const wake = new WakeWord({ onCommand: (text) => askAI(text) });
+//   wake.start();   // must be called from a user click/tap the first time (mic permission)
 
-/* ======================================
-   JARVIS AUTOMATIC VOICE WAKE-UP ENGINE
-   ====================================== */
+class WakeWord {
+  constructor({
+    wakeWords = ["jarvis", "hey jarvis", "jarvish", "javis", "service"], // common mis-hearings
+    lang = "en-IN",            // use "te-IN" for Telugu
+    commandTimeout = 8000,     // ms to wait for command after wake word
+    onWake = () => {},
+    onCommand = (text) => console.log("Command:", text),
+    onStatus = (s) => console.log("Status:", s),
+  } = {}) {
+    const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+    if (!SR) throw new Error("Speech recognition not supported in this browser");
 
-const JarvisWakeWord = (() => {
+    this.wakeWords = wakeWords.map((w) => w.toLowerCase());
+    this.onWake = onWake;
+    this.onCommand = onCommand;
+    this.onStatus = onStatus;
+    this.commandTimeout = commandTimeout;
 
-    const SpeechRecognition =
-        window.SpeechRecognition ||
-        window.webkitSpeechRecognition;
+    this.running = false;
+    this.awake = false;
+    this.timer = null;
 
-    let recognition;
-    let listening = false;
-    let active = false;
-    let speaking = false;
-    let restartTimer;
+    const rec = new SR();
+    rec.continuous = true;
+    rec.interimResults = true;
+    rec.lang = lang;
+    this.rec = rec;
 
-    function speak(message) {
+    rec.onresult = (e) => {
+      const result = e.results[e.results.length - 1];
+      const text = result[0].transcript.toLowerCase().trim();
 
-        speaking = true;
-
-        window.speechSynthesis.cancel();
-
-        const utterance =
-            new SpeechSynthesisUtterance(message);
-
-        utterance.lang = "en-US";
-        utterance.rate = 0.95;
-        utterance.pitch = 0.9;
-
-        utterance.onend = () => {
-            speaking = false;
-            restart();
-        };
-
-        window.speechSynthesis.speak(utterance);
-    }
-
-    function status(message) {
-
-        const element =
-            document.getElementById("status");
-
-        if (element) {
-            element.textContent = message;
+      if (!this.awake) {
+        const hit = this.wakeWords.find((w) => text.includes(w));
+        if (hit) {
+          this.awake = true;
+          this.onStatus("awake");
+          this.onWake();
+          this._beep();
+          // Command said in the same breath: "jarvis what is the time"
+          const after = text.split(hit).pop().trim();
+          if (result.isFinal && after.length > 2) this._finish(after);
+          else this._armTimeout();
         }
-
-        console.log("JARVIS:", message);
-    }
-
-    function init() {
-
-        if (!SpeechRecognition) {
-            status("VOICE RECOGNITION NOT SUPPORTED");
-            return false;
-        }
-
-        recognition = new SpeechRecognition();
-
-        recognition.lang = "en-US";
-        recognition.continuous = false;
-        recognition.interimResults = false;
-
-        recognition.onstart = () => {
-            status(active ? "JARVIS ACTIVE" : "STANDBY - LISTENING");
-        };
-
-        recognition.onresult = (event) => {
-
-            const command =
-                event.results[0][0].transcript
-                .toLowerCase()
-                .trim();
-
-            console.log("VOICE INPUT:", command);
-
-            if (!active) {
-
-                if (
-                    command === "jarvis" ||
-                    command.includes("hey jarvis")
-                ) {
-
-                    active = true;
-
-                    status("JARVIS ACTIVATED");
-
-                    window.dispatchEvent(
-                        new CustomEvent("jarvis:wakeup")
-                    );
-
-                    speak("Yes sir. I am listening.");
-                }
-
-            } else {
-
-                if (
-                    command === "stop" ||
-                    command.includes("stop jarvis")
-                ) {
-
-                    active = false;
-
-                    status("STANDBY MODE");
-
-                    window.dispatchEvent(
-                        new CustomEvent("jarvis:stop")
-                    );
-
-                    speak("Going to standby, sir.");
-                }
-                else {
-
-                    window.dispatchEvent(
-                        new CustomEvent("jarvis:command", {
-                            detail: { command }
-                        })
-                    );
-
-                }
-            }
-        };
-
-        recognition.onerror = (event) => {
-
-            console.log("Recognition error:", event.error);
-
-            if (
-                event.error === "not-allowed" ||
-                event.error === "service-not-allowed"
-            ) {
-                listening = false;
-                status("MICROPHONE PERMISSION REQUIRED");
-            }
-        };
-
-        recognition.onend = () => {
-            restart();
-        };
-
-        return true;
-    }
-
-    function restart() {
-
-        clearTimeout(restartTimer);
-
-        if (!listening || speaking) return;
-
-        restartTimer = setTimeout(() => {
-
-            if (!listening || speaking) return;
-
-            try {
-                recognition.start();
-            } catch (error) {
-                console.log("Restart:", error);
-            }
-
-        }, 700);
-    }
-
-    function start() {
-
-        if (!recognition && !init()) return;
-
-        if (listening) return;
-
-        listening = true;
-        active = false;
-
-        restart();
-    }
-
-    function stop() {
-
-        listening = false;
-        active = false;
-
-        clearTimeout(restartTimer);
-
-        if (recognition) {
-            recognition.stop();
-        }
-
-        window.speechSynthesis.cancel();
-
-        status("SYSTEM OFFLINE");
-    }
-
-    return {
-        start,
-        stop,
-        isActive: () => active
+      } else if (result.isFinal) {
+        const hit = this.wakeWords.find((w) => text.startsWith(w));
+        const cmd = hit ? text.slice(hit.length).trim() : text;
+        if (cmd) this._finish(cmd);
+      }
     };
 
-})();
+    rec.onerror = (e) => {
+      if (e.error === "not-allowed" || e.error === "service-not-allowed") {
+        this.running = false;
+        this.onStatus("mic-denied");
+      }
+    };
 
-/* Automatic event responses */
+    // Browser stops recognition every so often; restart to keep listening.
+    rec.onend = () => {
+      if (this.running) setTimeout(() => { try { rec.start(); } catch (_) {} }, 300);
+    };
+  }
 
-window.addEventListener("jarvis:wakeup", () => {
-    console.log("Wake-up event detected.");
-});
+  start() {
+    this.running = true;
+    try { this.rec.start(); } catch (_) {}
+    this.onStatus("listening");
+  }
 
-window.addEventListener("jarvis:stop", () => {
-    console.log("Standby event detected.");
-});
+  stop() {
+    this.running = false;
+    clearTimeout(this.timer);
+    this.rec.stop();
+    this.onStatus("stopped");
+  }
 
-window.addEventListener("jarvis:command", (event) => {
-    console.log("User command:", event.detail.command);
-});
+  _armTimeout() {
+    clearTimeout(this.timer);
+    this.timer = setTimeout(() => {
+      this.awake = false;
+      this.onStatus("listening");
+    }, this.commandTimeout);
+  }
+
+  _finish(cmd) {
+    clearTimeout(this.timer);
+    this.awake = false;
+    this.onStatus("listening");
+    this.onCommand(cmd);
+  }
+
+  _beep() {
+    try {
+      const ctx = new (window.AudioContext || window.webkitAudioContext)();
+      const o = ctx.createOscillator();
+      o.frequency.value = 880;
+      o.connect(ctx.destination);
+      o.start();
+      o.stop(ctx.currentTime + 0.12);
+    } catch (_) {}
+  }
+}
